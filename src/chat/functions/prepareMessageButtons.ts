@@ -266,7 +266,7 @@ webpack.onFullReady(() => {
       if (typeof r.extendedTextMessage !== 'undefined')
         delete r.extendedTextMessage;
       if (typeof r.conversation !== 'undefined') delete r.conversation;
-      r.viewOnceMessage = {
+      r.documentWithCaptionMessage = {
         message: {
           interactiveMessage: message.interactiveMessage,
         },
@@ -300,8 +300,14 @@ webpack.onFullReady(() => {
   wrapModuleFunction(typeAttributeFromProtobuf, (func, ...args) => {
     const [proto] = args;
 
-    if (proto?.viewOnceMessage?.interactiveMessage) {
-      const keys = Object.keys(proto?.viewOnceMessage?.interactiveMessage);
+    const interactiveMessage =
+      proto?.viewOnceMessage?.message?.interactiveMessage ||
+      proto?.documentWithCaptionMessage?.message?.interactiveMessage ||
+      proto?.viewOnceMessage?.interactiveMessage ||
+      proto?.documentWithCaptionMessage?.interactiveMessage;
+
+    if (interactiveMessage) {
+      const keys = Object.keys(interactiveMessage);
 
       const messagePart = [
         'documentMessage',
@@ -350,11 +356,11 @@ webpack.onFullReady(() => {
   });
 
   wrapModuleFunction(createFanoutMsgStanza, async (func, ...args) => {
-    let buttonNode: websocket.WapNode | null = null;
+    const bizNodes: websocket.WapNode[] = [];
     const proto: any = args[1].id ? args[2] : args[1];
 
     if (proto.buttonsMessage) {
-      buttonNode = websocket.smax('buttons');
+      bizNodes.push(websocket.smax('buttons'));
     } else if (proto.listMessage) {
       // The trick to send list message is to force the 'product_list' type in the biz node
       // const listType: number = proto.listMessage.listType || 0;
@@ -362,18 +368,30 @@ webpack.onFullReady(() => {
 
       const types = ['unknown', 'single_select', 'product_list'];
 
-      buttonNode = websocket.smax('list', {
-        v: '2',
-        type: types[listType],
-      });
+      bizNodes.push(
+        websocket.smax('list', {
+          v: '2',
+          type: types[listType],
+        })
+      );
+    }
+
+    const interactiveMessage =
+      proto?.viewOnceMessage?.message?.interactiveMessage ||
+      proto?.documentWithCaptionMessage?.message?.interactiveMessage;
+
+    if (interactiveMessage?.nativeFlowMessage?.buttons !== undefined) {
+      bizNodes.push(
+        websocket.smax('interactive', { v: '1', type: 'native_flow' })
+      );
     }
 
     let node = await func(...args);
-    if (proto?.viewOnceMessage?.message?.interactiveMessage) {
+    if (interactiveMessage?.nativeFlowMessage?.buttons !== undefined) {
       node = await encryptAndParserMsgButtons(...args, func);
     }
 
-    if (!buttonNode) {
+    if (bizNodes.length === 0) {
       return node;
     }
 
@@ -387,16 +405,17 @@ webpack.onFullReady(() => {
       content.push(bizNode);
     }
 
-    let hasButtonNode = false;
-
-    if (Array.isArray(bizNode.content)) {
-      hasButtonNode = !!bizNode.content.find((c) => c.tag === buttonNode?.tag);
-    } else {
+    if (!Array.isArray(bizNode.content)) {
       bizNode.content = [];
     }
 
-    if (!hasButtonNode) {
-      bizNode.content.push(buttonNode);
+    for (const bizChild of bizNodes) {
+      const exists = !!(bizNode.content as websocket.WapNode[]).find(
+        (c) => c.tag === bizChild.tag
+      );
+      if (!exists) {
+        (bizNode.content as websocket.WapNode[]).push(bizChild);
+      }
     }
 
     return node;

@@ -16,13 +16,20 @@
 
 import { MsgModel, websocket, Wid } from '../../whatsapp';
 
+function getInteractiveMessageFromProto(proto: any): any {
+  return (
+    proto?.viewOnceMessage?.message?.interactiveMessage ||
+    proto?.documentWithCaptionMessage?.message?.interactiveMessage
+  );
+}
+
 function parserButtons(
   proto: any,
   devices: Wid[]
 ): { proto: any; devices: Wid[] }[] {
   const mobileDevices = devices.filter((p: Wid) => !p.device);
   const webDevices = devices.filter((p: Wid) => p.device);
-  const interactiveMessage = proto.viewOnceMessage?.message?.interactiveMessage;
+  const interactiveMessage = getInteractiveMessageFromProto(proto);
   let useTemplateMessage = false;
 
   const protoForWeb = JSON.parse(JSON.stringify(proto));
@@ -145,6 +152,7 @@ function parserButtons(
       },
     };
     delete protoForWeb.viewOnceMessage;
+    delete protoForWeb.documentWithCaptionMessage;
     protoForWeb.documentWithCaptionMessage = useTemplateMessage
       ? templateMessage
       : buttonsMessage;
@@ -171,9 +179,9 @@ export async function encryptAndParserMsgButtons<
     func = groupData;
   }
   const parts: any[] = [];
-  if (proto?.viewOnceMessage?.message?.interactiveMessage) {
+  if (getInteractiveMessageFromProto(proto)) {
     const buttons = parserButtons(proto, devices);
-    buttons.map(async (btn) => {
+    for (const btn of buttons) {
       const result = await func(
         message,
         btn.proto,
@@ -183,7 +191,7 @@ export async function encryptAndParserMsgButtons<
         typeof groupData !== 'function' ? groupData : undefined
       );
       parts.push(...(result as any).stanza.content[0].content);
-    });
+    }
   }
 
   const node = await func(

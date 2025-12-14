@@ -45,6 +45,10 @@ function applyPatch() {
       const { message: n } = proto.ephemeralMessage;
       return n ? mediaTypeFromProtobuf(n) : null;
     }
+    if (proto.documentWithCaptionMessage) {
+      const { message: n } = proto.documentWithCaptionMessage;
+      return n ? mediaTypeFromProtobuf(n) : null;
+    }
     if (proto.viewOnceMessage) {
       const { message: n } = proto.viewOnceMessage;
       return n ? mediaTypeFromProtobuf(n) : null;
@@ -62,6 +66,10 @@ function applyPatch() {
     }
     if (proto.deviceSentMessage) {
       const { message: n } = proto.deviceSentMessage;
+      return n ? typeAttributeFromProtobuf(n) : 'text';
+    }
+    if (proto.documentWithCaptionMessage) {
+      const { message: n } = proto.documentWithCaptionMessage;
       return n ? typeAttributeFromProtobuf(n) : 'text';
     }
     if (proto.viewOnceMessage) {
